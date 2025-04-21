@@ -9,14 +9,15 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.resumeWithException
+import android.content.Context
 
-class CalculusCalculator(val result: MutableState<String>) {
+class CalculusCalculator(val result: MutableState<String>, val animateExpression: MutableState<Boolean>, val animateResult: MutableState<Boolean>) {
 
     private val _expression = mutableStateOf("")
     val expression: State<String> get() = _expression
 
     private val client = OkHttpClient()
-    private val stdUrl = "https://45ff-197-136-183-22.ngrok-free.app/"
+    private val stdUrl = "https://ad64-197-136-183-22.ngrok-free.app/"
 
     data class Key(
         val label: String,
@@ -25,7 +26,6 @@ class CalculusCalculator(val result: MutableState<String>) {
 
     fun appendToExpression(str: String) {
         _expression.value += str
-        if (str.matches(Regex("[0-9]")))
         if (isSimpleArithmetic(_expression.value)) {
             val evaluated = evaluateLocally(_expression.value)
             if (evaluated != null) {
@@ -40,6 +40,7 @@ class CalculusCalculator(val result: MutableState<String>) {
 
     fun clearExpression() {
         _expression.value = ""
+        result.value = ""
     }
 
     fun getExpression(): String = _expression.value
@@ -89,8 +90,9 @@ class CalculusCalculator(val result: MutableState<String>) {
 
             Key("csc") { appendToExpression("1/sin(") },
             Key("cot") { appendToExpression("1/tan(") },
-            Key("∫") { evaluateExpression(result, "integrate") },
-            Key("d/dx") { evaluateExpression(result, "differentiate") },
+            Key("∫") { },
+            Key("d/dx") { },
+            Key("x") { appendToExpression("x")},
 
             Key("x²") { appendToExpression("^2") },
             Key("√") { appendToExpression("sqrt(") },
@@ -102,35 +104,49 @@ class CalculusCalculator(val result: MutableState<String>) {
         )
     }
 
-    suspend fun evaluateExpression(result: MutableState<String>, method: String) {
+    suspend fun evaluateExpression(result: MutableState<String>, method: String, context: Context? = null) {
         val currentExpression = _expression.value
 
         if (method == "evaluate" && isSimpleArithmetic(currentExpression)) {
             try {
                 val evaluated = ExpressionBuilder(currentExpression).build().evaluate()
-                result.value = evaluated.toString()
+                animateExpression.value = true
+                animateResult.value = true
+                _expression.value = evaluated.toString()
+                result.value = ""
                 return
             } catch (_: Exception) {
-                // Fallback to server if exp4j fails (e.g., sin(x), integrate)
+                // Fallback to server
             }
+        }else if(method == "evaluate" && !isSimpleArithmetic(currentExpression)){
+            val url = encodedURL(currentExpression, method)
+            val request = Request.Builder().url(url).build()
+            getResponse(result, request)
+            return
         }
 
-        // Fallback: use server
-        val url = encodedURL(currentExpression, method)
+        val variable = "x"
+
+        val url = encodedURL(currentExpression, method, variable)
         val request = Request.Builder().url(url).build()
         getResponse(result, request)
     }
 
-    fun encodedURL(expression: String, method: String): String {
+
+    fun encodedURL(expression: String, method: String, variable: String = "x"): String {
         val encodedExpression = URLEncoder.encode(expression, StandardCharsets.UTF_8.toString())
-        return "$stdUrl$method?expression=$encodedExpression"
+        return if (method == "evaluate")
+            "$stdUrl$method?expression=$encodedExpression"
+        else
+            "$stdUrl$method?expression=$encodedExpression&variable=${variable}"
     }
 
     suspend fun getResponse(result: MutableState<String>, request: Request) {
         try {
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
-                result.value = response.body?.string() ?: ""
+                val unformattedExpression = response.body?.string() ?: ""
+                result.value = formatExpression(unformattedExpression)
             } else {
                 result.value = "Error: ${response.code}"
             }
@@ -171,6 +187,8 @@ class CalculusCalculator(val result: MutableState<String>) {
             else -> char
         }
     }
+    val getAnimateExpression: MutableState<Boolean> get() = animateExpression
+    val getAnimateResult: MutableState<Boolean> get() = animateResult
 }
 @OptIn(ExperimentalCoroutinesApi::class)
 suspend fun Call.await(): Response {
