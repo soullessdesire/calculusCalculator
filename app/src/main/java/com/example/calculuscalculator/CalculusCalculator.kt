@@ -9,7 +9,6 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.coroutines.resumeWithException
-import android.content.Context
 
 class CalculusCalculator(val result: MutableState<String>, val animateExpression: MutableState<Boolean>, val animateResult: MutableState<Boolean>) {
 
@@ -104,7 +103,7 @@ class CalculusCalculator(val result: MutableState<String>, val animateExpression
         )
     }
 
-    suspend fun evaluateExpression(result: MutableState<String>, method: String, context: Context? = null) {
+    suspend fun evaluateExpression(result: MutableState<String>, method: String) {
         val currentExpression = _expression.value
 
         if (method == "evaluate" && isSimpleArithmetic(currentExpression)) {
@@ -187,8 +186,6 @@ class CalculusCalculator(val result: MutableState<String>, val animateExpression
             else -> char
         }
     }
-    val getAnimateExpression: MutableState<Boolean> get() = animateExpression
-    val getAnimateResult: MutableState<Boolean> get() = animateResult
 }
 @OptIn(ExperimentalCoroutinesApi::class)
 suspend fun Call.await(): Response {
